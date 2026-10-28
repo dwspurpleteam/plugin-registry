@@ -1,15 +1,19 @@
 package ru.itmo.pluginservice.simplepluginregistry.controller;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ProblemDetail;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import ru.itmo.pluginservice.simplepluginregistry.dto.CreatePluginRequest;
+import ru.itmo.pluginservice.simplepluginregistry.dto.CreatePluginVersionRequest;
 import ru.itmo.pluginservice.simplepluginregistry.dto.PagedResponse;
 import ru.itmo.pluginservice.simplepluginregistry.dto.PluginResponse;
 import ru.itmo.pluginservice.simplepluginregistry.dto.PluginVersionResponse;
@@ -61,18 +65,17 @@ public class PluginRegistryController {
     }
 
     @PostMapping
-    public ProblemDetail uploadPluginStub() {
-        return notImplemented("Plugin upload is not implemented yet");
+    @ResponseStatus(HttpStatus.CREATED)
+    public PluginResponse createPlugin(@Valid @RequestBody CreatePluginRequest request) {
+        return registryService.createPlugin(request);
     }
 
     @PostMapping("/{pluginId}/versions")
-    public ProblemDetail uploadVersionStub(@PathVariable String pluginId) {
-        return notImplemented("Version upload for plugin '%s' is not implemented yet".formatted(pluginId));
-    }
-
-    private ProblemDetail notImplemented(String message) {
-        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_IMPLEMENTED, message);
-        detail.setTitle("Not implemented");
-        return detail;
+    @ResponseStatus(HttpStatus.CREATED)
+    public PluginVersionResponse createVersion(
+            @PathVariable String pluginId,
+            @Valid @RequestBody CreatePluginVersionRequest request
+    ) {
+        return registryService.createVersion(pluginId, request);
     }
 }

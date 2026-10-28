@@ -15,8 +15,15 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+        type:
+          json_format_mapper: jackson3
   flyway:
     enabled: true
+
+springdoc:
+  paths-to-match: /v1/**, /health
+  swagger-ui:
+    path: /swagger-ui
 
 server:
   port: ${SERVER_PORT:8080}

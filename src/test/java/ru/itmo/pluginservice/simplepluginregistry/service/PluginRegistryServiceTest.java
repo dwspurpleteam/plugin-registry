@@ -8,11 +8,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import ru.itmo.pluginservice.simplepluginregistry.dto.CreatePluginRequest;
+import ru.itmo.pluginservice.simplepluginregistry.dto.CreatePluginVersionRequest;
 import ru.itmo.pluginservice.simplepluginregistry.dto.PagedResponse;
 import ru.itmo.pluginservice.simplepluginregistry.dto.PluginResponse;
 import ru.itmo.pluginservice.simplepluginregistry.entity.PluginEntity;
 import ru.itmo.pluginservice.simplepluginregistry.entity.PluginVersionEntity;
 import ru.itmo.pluginservice.simplepluginregistry.entity.PluginVersionId;
+import ru.itmo.pluginservice.simplepluginregistry.exception.ResourceConflictException;
 import ru.itmo.pluginservice.simplepluginregistry.exception.ResourceNotFoundException;
 import ru.itmo.pluginservice.simplepluginregistry.repository.PluginRepository;
 import ru.itmo.pluginservice.simplepluginregistry.repository.PluginVersionRepository;
@@ -24,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -37,11 +41,54 @@ class PluginRegistryServiceTest {
     @Mock
     private PluginVersionRepository versionRepository;
 
+    @Mock
+    private PluginManifestFactory manifestFactory;
+
     private PluginRegistryService service;
 
     @BeforeEach
     void setUp() {
-        service = new PluginRegistryService(pluginRepository, versionRepository);
+        service = new PluginRegistryService(pluginRepository, versionRepository, manifestFactory);
+    }
+
+    @Test
+    void createsPluginMetadata() {
+        CreatePluginRequest request = new CreatePluginRequest("plugin-1", "Test plugin", "Description");
+        when(pluginRepository.save(any(PluginEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        PluginResponse response = service.createPlugin(request);
+
+        assertThat(response).isEqualTo(new PluginResponse("plugin-1", "Test plugin", "Description"));
+        verify(pluginRepository).save(any(PluginEntity.class));
+    }
+
+    @Test
+    void rejectsDuplicatePlugin() {
+        when(pluginRepository.existsById("plugin-1")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.createPlugin(
+                new CreatePluginRequest("plugin-1", "Test plugin", null)
+        ))
+                .isInstanceOf(ResourceConflictException.class)
+                .hasMessageContaining("plugin-1");
+    }
+
+    @Test
+    void createsImmutablePluginVersionFromDto() throws Exception {
+        PluginEntity plugin = new PluginEntity("plugin-1", "Test plugin", "Description");
+        CreatePluginVersionRequest request = createVersionRequest();
+        JsonNode manifest = new ObjectMapper().readTree("""
+                {"manifest-version":"0.1","plugin-id":"plugin-1","plugin-version":"1.0.0"}
+                """);
+        when(pluginRepository.findById("plugin-1")).thenReturn(Optional.of(plugin));
+        when(manifestFactory.create(plugin, request)).thenReturn(manifest);
+
+        assertThat(service.createVersion("plugin-1", request)).isEqualTo(
+                new ru.itmo.pluginservice.simplepluginregistry.dto.PluginVersionResponse(
+                        "plugin-1", "1.0.0", "Test plugin", "Description", "1.1.0", "2.1.0"
+                )
+        );
+        verify(versionRepository).save(any(PluginVersionEntity.class));
     }
 
     @Test
@@ -81,5 +128,26 @@ class PluginRegistryServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("9.9.9")
                 .hasMessageContaining("plugin-1");
+    }
+
+    private CreatePluginVersionRequest createVersionRequest() {
+        return new CreatePluginVersionRequest(
+                "0.1",
+                "1.0.0",
+                new CreatePluginVersionRequest.Frontend("1.1.0", "https://example.com/ui"),
+                new CreatePluginVersionRequest.Backend(
+                        "2.1.0",
+                        "https://example.com/health",
+                        new CreatePluginVersionRequest.Events(
+                                "https://example.com/events",
+                                List.of(),
+                                List.of("participant")
+                        ),
+                        new CreatePluginVersionRequest.Media(
+                                List.of(CreatePluginVersionRequest.MediaType.AUDIO),
+                                List.of()
+                        )
+                )
+        );
     }
 }

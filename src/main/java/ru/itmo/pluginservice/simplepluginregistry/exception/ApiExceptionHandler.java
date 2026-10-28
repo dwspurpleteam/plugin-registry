@@ -2,6 +2,7 @@ package ru.itmo.pluginservice.simplepluginregistry.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -10,6 +11,16 @@ import jakarta.validation.ConstraintViolationException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+
+    @ExceptionHandler({ResourceConflictException.class, DataIntegrityViolationException.class})
+    ProblemDetail handleConflict(Exception exception) {
+        String message = exception instanceof ResourceConflictException
+                ? exception.getMessage()
+                : "A resource with the same identifier already exists";
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, message);
+        detail.setTitle("Resource conflict");
+        return detail;
+    }
 
     @ExceptionHandler(ResourceNotFoundException.class)
     ProblemDetail handleNotFound(ResourceNotFoundException exception) {
