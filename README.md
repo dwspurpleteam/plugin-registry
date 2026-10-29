@@ -12,6 +12,22 @@
 
 При старте Flyway создаёт таблицы `plugins` и `plugin_versions`. Hibernate только проверяет схему и не изменяет её.
 
+## Docker
+
+Собрать executable JAR и Docker-образ:
+
+```shell
+./gradlew dockerBuild
+```
+
+По умолчанию образ получает имя `simple-plugin-registry:0.0.1-SNAPSHOT`. Имя и тег можно переопределить:
+
+```shell
+./gradlew dockerBuild -PdockerImageName=simple-plugin-registry:local
+```
+
+Настройки подключения к PostgreSQL передаются контейнеру через переменные `DB_URL`, `DB_USERNAME` и `DB_PASSWORD`.
+
 ## HTTP API
 
 Интерактивная документация Swagger UI доступна по адресу

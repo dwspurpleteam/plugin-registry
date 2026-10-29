@@ -33,3 +33,21 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+def dockerImageName = providers.gradleProperty('dockerImageName')
+        .orElse("${project.name}:${project.version}")
+
+tasks.register('dockerBuild', Exec) {
+    group = 'docker'
+    description = 'Builds the application JAR and a Docker image.'
+    dependsOn tasks.named('bootJar')
+
+    doFirst {
+        def bootJarFile = tasks.named('bootJar').get().archiveFile.get().asFile
+
+        commandLine 'docker', 'build',
+                '--build-arg', "JAR_FILE=${project.relativePath(bootJarFile)}",
+                '--tag', dockerImageName.get(),
+                '.'
+    }
+}
