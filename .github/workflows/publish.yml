@@ -69,6 +69,6 @@ jobs:
         with:
           context: .
           build-args: JAR_FILE=build/libs/simple-plugin-registry-0.0.1-SNAPSHOT.jar
-          push: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
+          push: true
           tags: ${{ steps.image.outputs.tags }}
           labels: ${{ steps.image.outputs.labels }}
