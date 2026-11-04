@@ -14,7 +14,6 @@ jobs:
     environment: ${{ github.ref == 'refs/heads/dev' && 'stage' || github.ref == 'refs/heads/master' && 'prod' || '' }}
     concurrency:
       group: frontend-${{ github.ref }}
-      cancel-in-progress: false
     defaults:
       run:
         working-directory: frontend
@@ -38,18 +37,13 @@ jobs:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
           log-public-key: false
 
-      - name: configure ssh
-        if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master'
-        env:
-          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: |
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-
       - name: deploy
         if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master'
         env:
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_ENV: ${{ github.ref == 'refs/heads/dev' && 'stage' || 'prod' }}
-        run: rsync -az --delete dist/ "$DEPLOY_USER@$DEPLOY_HOST:/srv/dwspurpleteam/static/$DEPLOY_ENV/"
+        run: |
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          rsync -az --delete dist/ "$DEPLOY_USER@$DEPLOY_HOST:/srv/dwspurpleteam/static/$DEPLOY_ENV/"
