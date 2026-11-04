@@ -3,6 +3,7 @@ name: deploy frontend
 on:
   push:
     branches: ['**']
+    paths: ['frontend/**']
 
 permissions:
   contents: read
