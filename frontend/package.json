@@ -2,12 +2,6 @@
   "name": "@dwspurpleteam/simple-plugin-registry-frontend",
   "version": "0.1.0",
   "type": "module",
-  "files": [
-    "dist"
-  ],
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
-  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -26,5 +20,6 @@
     "@vitejs/plugin-react": "^5.0.2",
     "typescript": "~5.9.2",
     "vite": "^7.1.4"
-  }
+  },
+  "private": true
 }
