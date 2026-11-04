@@ -11,9 +11,9 @@ jobs:
   build:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
-    environment: ${{ github.ref == 'refs/heads/master' && 'prod' || 'stage' }}
+    environment: ${{ github.ref == 'refs/heads/dev' && 'stage' || github.ref == 'refs/heads/master' && 'prod' || '' }}
     concurrency:
-      group: frontend-${{ github.ref == 'refs/heads/master' && 'prod' || 'stage' }}
+      group: frontend-${{ github.ref }}
       cancel-in-progress: false
     defaults:
       run:
@@ -33,11 +33,13 @@ jobs:
       - run: npm run build
 
       - uses: webfactory/ssh-agent@v0.10.0
+        if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master'
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
           log-public-key: false
 
       - name: configure ssh
+        if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master'
         env:
           SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
@@ -45,8 +47,9 @@ jobs:
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
 
       - name: deploy
+        if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master'
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_ENV: ${{ github.ref == 'refs/heads/master' && 'prod' || 'stage' }}
+          DEPLOY_ENV: ${{ github.ref == 'refs/heads/dev' && 'stage' || 'prod' }}
         run: rsync -az --delete dist/ "$DEPLOY_USER@$DEPLOY_HOST:/srv/dwspurpleteam/static/$DEPLOY_ENV/"
