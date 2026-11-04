@@ -40,10 +40,7 @@ jobs:
       - name: deploy
         if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master'
         env:
-          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_ENV: ${{ github.ref == 'refs/heads/dev' && 'stage' || 'prod' }}
-        run: |
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          rsync -az --delete dist/ "$DEPLOY_USER@$DEPLOY_HOST:/srv/dwspurpleteam/static/$DEPLOY_ENV/"
+        run: rsync -az --delete -e 'ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' dist/ "$DEPLOY_USER@$DEPLOY_HOST:/srv/dwspurpleteam/static/$DEPLOY_ENV/"
