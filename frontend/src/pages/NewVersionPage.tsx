@@ -4,8 +4,9 @@ import { createPluginVersion } from "../api/pluginRegistry";
 import type { CreatePluginVersionRequest, MediaType, PluginManifest } from "../api/types";
 import { PageHeader } from "../components/PageHeader";
 
-const EVENT_GROUPS = ["participant", "media", "interaction"];
+const EVENT_GROUPS = ["participant", "media", "interaction", "call"];
 const EVENT_TYPES = [
+  "call.started", "call.ended",
   "participant.joined", "participant.left", "participant.connection_aborted",
   "participant.reconnecting", "participant.reconnected", "participant.kicked",
   "media.audio_muted", "media.audio_unmuted", "media.video_enabled", "media.video_disabled",
@@ -14,6 +15,9 @@ const EVENT_TYPES = [
 ];
 const MEDIA_TYPES: MediaType[] = ["AUDIO", "VIDEO", "SCREEN_SHARE", "SCREEN_SHARE_AUDIO"];
 const EVENT_DESCRIPTIONS: Record<string, string> = {
+  call: "События начала и завершения звонка.",
+  "call.started": "Звонок начался.",
+  "call.ended": "Звонок завершился.",
   participant: "События жизненного цикла участников звонка.",
   media: "События состояния и публикации медиа-потоков.",
   interaction: "События взаимодействия участников.",
@@ -54,7 +58,7 @@ export function NewVersionPage() {
     name: "new-plugin-version", description: "", frontendSdkVersion: "1.0.0",
     frontendUrl: "https://example.com/plugin-ui/web", backendSdkVersion: "1.0.0",
     healthUrl: "https://example.com/api/healthzz", eventUrl: "https://example.com/api/events",
-    eventMode: "groups", eventGroups: EVENT_GROUPS, eventTypes: [], mediaInput: ["AUDIO"], mediaOutput: [], actions: "",
+    eventMode: "groups", eventGroups: EVENT_GROUPS.filter((group) => group !== "call"), eventTypes: [], mediaInput: ["AUDIO"], mediaOutput: [], actions: "",
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
