@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   backend:
@@ -23,3 +24,23 @@ jobs:
           cache: gradle
 
       - run: ./gradlew build
+
+      - name: artifact
+        if: github.ref == 'refs/heads/master'
+        uses: actions/upload-artifact@v4
+        with:
+          name: application
+          path: build/libs/simple-plugin-registry-0.0.1-SNAPSHOT.jar
+          if-no-files-found: error
+
+  image:
+    if: github.ref == 'refs/heads/master'
+    needs: backend
+    uses: dwspurpleteam/.github/.github/workflows/image.yml@main
+    with:
+      service: pluginregistry
+      artifact: application
+      artifact-path: image-context/build/libs
+      dockerfile: Dockerfile.ci
+      context: image-context
+    secrets: inherit
