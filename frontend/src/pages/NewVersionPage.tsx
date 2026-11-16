@@ -38,7 +38,7 @@ type EventSelectionMode = "groups" | "types";
 interface VersionForm {
   name: string; description: string; frontendSdkVersion: string; frontendUrl: string;
   backendSdkVersion: string; healthUrl: string; eventUrl: string; eventMode: EventSelectionMode;
-  eventGroups: string[]; eventTypes: string[]; mediaInput: MediaType[]; mediaOutput: MediaType[];
+  eventGroups: string[]; eventTypes: string[]; mediaInput: MediaType[]; mediaOutput: MediaType[]; actions: string;
 }
 interface FormErrors { version?: string; frontendSdkVersion?: string; backendSdkVersion?: string; healthUrl?: string; submit?: string; }
 
@@ -54,7 +54,7 @@ export function NewVersionPage() {
     name: "new-plugin-version", description: "", frontendSdkVersion: "1.0.0",
     frontendUrl: "https://example.com/plugin-ui/web", backendSdkVersion: "1.0.0",
     healthUrl: "https://example.com/api/healthzz", eventUrl: "https://example.com/api/events",
-    eventMode: "groups", eventGroups: EVENT_GROUPS, eventTypes: [], mediaInput: ["AUDIO"], mediaOutput: [],
+    eventMode: "groups", eventGroups: EVENT_GROUPS, eventTypes: [], mediaInput: ["AUDIO"], mediaOutput: [], actions: "",
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
@@ -66,6 +66,7 @@ export function NewVersionPage() {
       sdkVersion: form.backendSdkVersion.trim(), healthUrl: form.healthUrl.trim(),
       events: { eventUrl: form.eventUrl.trim(), availableEventTypes: form.eventMode === "types" ? form.eventTypes : [], availableEventGroups: form.eventMode === "groups" ? form.eventGroups : [] },
       media: { input: form.mediaInput, output: form.mediaOutput },
+      actions: [...new Set(form.actions.split("\n").map((action) => action.trim()).filter(Boolean))],
     },
   }), [form, version]);
   const manifestText = useMemo(() => JSON.stringify(toManifest(pluginId, form, request), null, 2), [form, pluginId, request]);
@@ -123,6 +124,9 @@ export function NewVersionPage() {
           <span className="choice-label">Входящие потоки</span>{checkboxList("media-input", MEDIA_TYPES, form.mediaInput, (next) => setField("mediaInput", next))}
           <span className="choice-label">Исходящие потоки</span>{checkboxList("media-output", MEDIA_TYPES, form.mediaOutput, (next) => setField("mediaOutput", next))}
         </div>
+        <div className="form-section"><h3>Команды</h3>
+          <Field label="Разрешённые команды" hint="Укажите каждую команду или название исходящего события с новой строки."><textarea className="form-textarea compact" value={form.actions} onChange={(event) => setField("actions", event.target.value)} /></Field>
+        </div>
         {errors.submit ? <div className="inline-alert">{errors.submit}</div> : null}
         <div className="form-actions"><Link className="button secondary" to={`/plugins/${encodeURIComponent(pluginId)}/versions`}>Отмена</Link><button className="button primary" type="submit" disabled={submitting}>{submitting ? "Публикация…" : "Опубликовать версию"}</button></div>
       </section>
@@ -143,5 +147,5 @@ function toManifest(pluginId: string, form: VersionForm, request: CreatePluginVe
   const events: Record<string, unknown> = { "event-url": request.backend.events.eventUrl };
   if (form.eventMode === "groups") events["available-event-groups"] = request.backend.events.availableEventGroups;
   else events["available-event-types"] = request.backend.events.availableEventTypes;
-  return { "manifest-version": request.manifestVersion, "plugin-id": pluginId, "plugin-version": request.pluginVersion, name: form.name, description: form.description, frontend: { "sdk-version": request.frontend.sdkVersion, "url-web": request.frontend.urlWeb }, backend: { "sdk-version": request.backend.sdkVersion, "health-url": request.backend.healthUrl, events, media: { input: request.backend.media.input, output: request.backend.media.output } } };
+  return { "manifest-version": request.manifestVersion, "plugin-id": pluginId, "plugin-version": request.pluginVersion, name: form.name, description: form.description, frontend: { "sdk-version": request.frontend.sdkVersion, "url-web": request.frontend.urlWeb }, backend: { "sdk-version": request.backend.sdkVersion, "health-url": request.backend.healthUrl, events, media: { input: request.backend.media.input, output: request.backend.media.output }, ...(request.backend.actions.length ? { actions: request.backend.actions } : {}) } };
 }

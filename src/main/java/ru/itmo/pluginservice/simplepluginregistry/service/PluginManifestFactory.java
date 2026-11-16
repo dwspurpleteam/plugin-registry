@@ -51,6 +51,10 @@ public class PluginManifestFactory {
         putMediaTypes(media, "input", request.backend().media().input());
         putMediaTypes(media, "output", request.backend().media().output());
 
+        if (request.backend().actions() != null && !request.backend().actions().isEmpty()) {
+            putStrings(backend, "actions", request.backend().actions());
+        }
+
         return manifest;
     }
 
