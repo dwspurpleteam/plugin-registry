@@ -1,20 +1,10 @@
-FROM eclipse-temurin:25-jdk AS builder
-
-RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /src
-
-COPY . .
-
-RUN ./gradlew bootJar --no-daemon
-
 FROM eclipse-temurin:25-jre
 
 RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY --from=builder /src/build/libs/simple-plugin-registry-0.0.1-SNAPSHOT.jar application.jar
+COPY build/libs/simple-plugin-registry-0.0.1-SNAPSHOT.jar application.jar
 
 USER 1000:1000
 

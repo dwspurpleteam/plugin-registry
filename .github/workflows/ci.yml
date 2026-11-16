@@ -40,7 +40,5 @@ jobs:
     with:
       service: pluginregistry
       artifact: application
-      artifact-path: image-context/build/libs
-      dockerfile: Dockerfile.ci
-      context: image-context
+      artifact-path: build/libs
     secrets: inherit
