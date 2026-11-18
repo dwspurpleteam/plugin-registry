@@ -532,7 +532,7 @@ tbody tr:hover {
 
 .editor-layout {
   display: grid;
-  grid-template-columns: minmax(480px, 1.55fr) minmax(300px, 0.85fr);
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   align-items: start;
   gap: 22px;
 }
