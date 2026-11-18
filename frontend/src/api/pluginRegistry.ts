@@ -1,6 +1,7 @@
 import type {
   CreatePluginRequest,
   CreatePluginVersionRequest,
+  JsonSchema,
   PagedResponse,
   Plugin,
   PluginManifest,
@@ -76,6 +77,13 @@ export function getPluginManifest(pluginId: string, version: string, signal?: Ab
     `/v1/plugins/${encodeURIComponent(pluginId)}/versions/${encodeURIComponent(version)}/manifest`,
     { signal },
   );
+}
+
+export function getManifestSchema11(signal?: AbortSignal) {
+  return request<JsonSchema>("/v1/manifest-schemas/1.1", {
+    signal,
+    headers: { Accept: "application/schema+json" },
+  });
 }
 
 export function createPlugin(payload: CreatePluginRequest) {

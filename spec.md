@@ -15,6 +15,8 @@ Registry не запускает plugin backend, не управляет акт�
 
 ## HTTP API
 
+`GET /v1/manifest-schemas/1.1` возвращает используемую приложением JSON Schema 1.1. Пользовательский интерфейс применяет её для подсказок и предварительной диагностики; окончательная проверка всегда выполняется сервером при публикации.
+
 ```text
 GET  /v1/plugins?limit={limit}&page={page}
 GET  /v1/plugins/{pluginId}/versions?limit={limit}&page={page}

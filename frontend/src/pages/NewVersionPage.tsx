@@ -1,10 +1,15 @@
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { createPluginVersion } from "../api/pluginRegistry";
+import { createPluginVersion, getManifestSchema11 } from "../api/pluginRegistry";
 import type {
   CreatePluginVersionRequest,
+  JsonSchema,
   PluginManifest,
 } from "../api/types";
+import {
+  ManifestJsonEditor,
+  type ManifestJsonEditorHandle,
+} from "../components/ManifestJsonEditor";
 import { PageHeader } from "../components/PageHeader";
 
 function defaultManifest(pluginId: string) {
@@ -56,6 +61,28 @@ export function NewVersionPage() {
   const [manifestText, setManifestText] = useState(() => defaultManifest(pluginId));
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
+  const [manifestSchema, setManifestSchema] = useState<JsonSchema | null>(null);
+  const [schemaError, setSchemaError] = useState<string | null>(null);
+  const manifestEditorRef = useRef<ManifestJsonEditorHandle>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getManifestSchema11(controller.signal)
+      .then((schema) => {
+        setManifestSchema(schema);
+        setSchemaError(null);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        const reason = error instanceof Error ? error.message : "неизвестная ошибка";
+        setSchemaError(
+          `Не удалось загрузить схему 1.1: ${reason}. Подсказки значений временно недоступны.`,
+        );
+      });
+    return () => controller.abort();
+  }, []);
 
   const jsonStatus = useMemo(() => {
     try {
@@ -182,16 +209,28 @@ export function NewVersionPage() {
               {jsonStatus.label}
             </span>
           </div>
-          <label className="sr-only" htmlFor="manifest-json">
-            JSON-манифест
-          </label>
-          <textarea
-            id="manifest-json"
-            className="json-editor"
+          <div className="editor-hint" role="note">
+            <span>
+              <strong>Подсказки значений:</strong>{" "}
+              поставьте курсор внутрь массива и нажмите <kbd>Ctrl</kbd>+<kbd>Space</kbd>
+              {" "}или кнопку справа. В macOS сочетание может перехватываться системой.
+              Выберите значение клавишами ↑/↓ и нажмите <kbd>Enter</kbd>.
+            </span>
+            <button
+              className="editor-suggest-button"
+              type="button"
+              disabled={!manifestSchema}
+              onClick={() => manifestEditorRef.current?.showSuggestions()}
+            >
+              Показать варианты
+            </button>
+          </div>
+          {schemaError ? <div className="editor-schema-error">{schemaError}</div> : null}
+          <ManifestJsonEditor
+            ref={manifestEditorRef}
             value={manifestText}
-            onChange={(event) => setManifestText(event.target.value)}
-            spellCheck={false}
-            aria-invalid={Boolean(errors.manifest)}
+            schema={manifestSchema}
+            onChange={setManifestText}
           />
           {errors.manifest ? <div className="editor-error">{errors.manifest}</div> : null}
         </section>

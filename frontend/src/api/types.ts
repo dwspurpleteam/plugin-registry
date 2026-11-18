@@ -67,3 +67,5 @@ export interface ProblemDetail {
   status?: number;
   errors?: string[];
 }
+
+export type JsonSchema = Record<string, unknown>;
