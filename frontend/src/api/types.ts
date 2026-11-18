@@ -32,23 +32,31 @@ export interface CreatePluginRequest {
 export type MediaType = "AUDIO" | "VIDEO" | "SCREEN_SHARE" | "SCREEN_SHARE_AUDIO";
 
 export interface CreatePluginVersionRequest {
-  manifestVersion: string;
-  pluginVersion: string;
+  "manifest-version": "1.1";
+  "plugin-id": string;
+  "plugin-version": string;
+  name: string;
+  description?: string;
   frontend: {
-    sdkVersion: string;
-    urlWeb: string;
+    "url-web": string;
+    "sdk-version"?: string;
   };
   backend: {
-    sdkVersion: string;
-    healthUrl: string;
-    events: {
-      eventUrl: string;
-      availableEventTypes: string[];
-      availableEventGroups: string[];
+    "health-url": string;
+    "control-url": string;
+    "sdk-version"?: string;
+    "initial-state"?: string[];
+    events?: {
+      "available-event-types"?: string[];
+      "available-event-groups"?: string[];
     };
-    media: {
-      input: MediaType[];
-      output: MediaType[];
+    media?: {
+      input?: MediaType[];
+      output?: MediaType[];
+    };
+    results?: {
+      keys: string[];
+      "delivery-report-url"?: string;
     };
   };
 }
@@ -57,4 +65,5 @@ export interface ProblemDetail {
   title?: string;
   detail?: string;
   status?: number;
+  errors?: string[];
 }

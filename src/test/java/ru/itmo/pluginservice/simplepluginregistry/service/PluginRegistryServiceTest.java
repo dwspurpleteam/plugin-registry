@@ -3,6 +3,7 @@ package ru.itmo.pluginservice.simplepluginregistry.service;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
@@ -12,13 +13,17 @@ import ru.itmo.pluginservice.simplepluginregistry.dto.CreatePluginRequest;
 import ru.itmo.pluginservice.simplepluginregistry.dto.CreatePluginVersionRequest;
 import ru.itmo.pluginservice.simplepluginregistry.dto.PagedResponse;
 import ru.itmo.pluginservice.simplepluginregistry.dto.PluginResponse;
+import ru.itmo.pluginservice.simplepluginregistry.dto.PluginVersionResponse;
 import ru.itmo.pluginservice.simplepluginregistry.entity.PluginEntity;
 import ru.itmo.pluginservice.simplepluginregistry.entity.PluginVersionEntity;
 import ru.itmo.pluginservice.simplepluginregistry.entity.PluginVersionId;
+import ru.itmo.pluginservice.simplepluginregistry.exception.ManifestValidationException;
 import ru.itmo.pluginservice.simplepluginregistry.exception.ResourceConflictException;
 import ru.itmo.pluginservice.simplepluginregistry.exception.ResourceNotFoundException;
 import ru.itmo.pluginservice.simplepluginregistry.repository.PluginRepository;
 import ru.itmo.pluginservice.simplepluginregistry.repository.PluginVersionRepository;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 import java.util.Optional;
@@ -27,10 +32,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
 class PluginRegistryServiceTest {
@@ -44,11 +49,20 @@ class PluginRegistryServiceTest {
     @Mock
     private PluginManifestFactory manifestFactory;
 
+    @Mock
+    private PluginManifestValidator manifestValidator;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private PluginRegistryService service;
 
     @BeforeEach
     void setUp() {
-        service = new PluginRegistryService(pluginRepository, versionRepository, manifestFactory);
+        service = new PluginRegistryService(
+                pluginRepository,
+                versionRepository,
+                manifestFactory,
+                manifestValidator
+        );
     }
 
     @Test
@@ -74,21 +88,94 @@ class PluginRegistryServiceTest {
     }
 
     @Test
-    void createsImmutablePluginVersionFromDto() throws Exception {
+    void validatesSubmittedAndFinalManifestBeforeSaving() throws Exception {
         PluginEntity plugin = new PluginEntity("plugin-1", "Test plugin", "Description");
         CreatePluginVersionRequest request = createVersionRequest();
-        JsonNode manifest = new ObjectMapper().readTree("""
-                {"manifest-version":"0.1","plugin-id":"plugin-1","plugin-version":"1.0.0"}
+        JsonNode submitted = request.manifest();
+        JsonNode manifest = objectMapper.readTree("""
+                {
+                  "manifest-version":"1.1",
+                  "plugin-id":"plugin-1",
+                  "plugin-version":"1.0.0",
+                  "name":"Test plugin",
+                  "frontend":{"url-web":"https://example.com/ui","sdk-version":"1.1.0"},
+                  "backend":{
+                    "health-url":"https://example.com/health",
+                    "control-url":"https://example.com/control",
+                    "sdk-version":"2.1.0"
+                  }
+                }
                 """);
         when(pluginRepository.findById("plugin-1")).thenReturn(Optional.of(plugin));
         when(manifestFactory.create(plugin, request)).thenReturn(manifest);
 
-        assertThat(service.createVersion("plugin-1", request)).isEqualTo(
-                new ru.itmo.pluginservice.simplepluginregistry.dto.PluginVersionResponse(
-                        "plugin-1", "1.0.0", "Test plugin", "Description", "1.1.0", "2.1.0"
-                )
-        );
-        verify(versionRepository).save(any(PluginVersionEntity.class));
+        PluginVersionResponse response = service.createVersion("plugin-1", request);
+
+        assertThat(response).isEqualTo(new PluginVersionResponse(
+                "plugin-1", "1.0.0", "Test plugin", "Description", "1.1.0", "2.1.0"
+        ));
+        InOrder order = inOrder(manifestValidator, manifestFactory, versionRepository);
+        order.verify(manifestValidator).validate(submitted);
+        order.verify(manifestFactory).create(plugin, request);
+        order.verify(manifestValidator).validate(manifest);
+        order.verify(versionRepository).save(any(PluginVersionEntity.class));
+    }
+
+    @Test
+    void doesNotSaveWhenGeneratedManifestFailsValidation() throws Exception {
+        PluginEntity plugin = new PluginEntity("plugin-1", "Test plugin", null);
+        CreatePluginVersionRequest request = createVersionRequest();
+        JsonNode invalidFinalManifest = objectMapper.readTree("{} ");
+        when(pluginRepository.findById("plugin-1")).thenReturn(Optional.of(plugin));
+        when(manifestFactory.create(plugin, request)).thenReturn(invalidFinalManifest);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            JsonNode candidate = invocation.getArgument(0);
+            if (candidate.equals(invalidFinalManifest)) {
+                throw new ManifestValidationException(List.of("backend.control-url: missing"));
+            }
+            return null;
+        }).when(manifestValidator).validate(any());
+
+        assertThatThrownBy(() -> service.createVersion("plugin-1", request))
+                .isInstanceOf(ManifestValidationException.class);
+        verify(versionRepository, never()).save(any());
+    }
+
+    @Test
+    void rejectsPluginIdThatDoesNotMatchPublicationPath() throws Exception {
+        PluginEntity plugin = new PluginEntity("plugin-1", "Test plugin", null);
+        CreatePluginVersionRequest request = request(objectMapper.readTree("""
+                {
+                  "manifest-version":"1.1",
+                  "plugin-id":"another-plugin",
+                  "plugin-version":"1.0.0",
+                  "name":"Test plugin",
+                  "frontend":{"url-web":"https://example.com/ui"},
+                  "backend":{
+                    "health-url":"https://example.com/health",
+                    "control-url":"https://example.com/control"
+                  }
+                }
+                """));
+        when(pluginRepository.findById("plugin-1")).thenReturn(Optional.of(plugin));
+
+        assertThatThrownBy(() -> service.createVersion("plugin-1", request))
+                .isInstanceOf(ManifestValidationException.class)
+                .hasMessageContaining("plugin-id");
+        verify(versionRepository, never()).save(any());
+    }
+
+    @Test
+    void rejectsDuplicatePluginVersion() throws Exception {
+        PluginEntity plugin = new PluginEntity("plugin-1", "Test plugin", null);
+        CreatePluginVersionRequest request = createVersionRequest();
+        when(pluginRepository.findById("plugin-1")).thenReturn(Optional.of(plugin));
+        when(versionRepository.existsById(new PluginVersionId("plugin-1", "1.0.0"))).thenReturn(true);
+
+        assertThatThrownBy(() -> service.createVersion("plugin-1", request))
+                .isInstanceOf(ResourceConflictException.class)
+                .hasMessageContaining("1.0.0");
+        verify(versionRepository, never()).save(any());
     }
 
     @Test
@@ -108,16 +195,48 @@ class PluginRegistryServiceTest {
     }
 
     @Test
-    void returnsManifestWithoutChangingItsStructure() throws Exception {
+    void returnsPreviouslyPublishedLegacyManifestWithoutConversion() throws Exception {
         PluginEntity plugin = new PluginEntity("plugin-1", "Test plugin", "Description");
-        JsonNode manifest = new ObjectMapper().readTree("""
-                {"manifest-version":"0.1","plugin-id":"plugin-1"}
+        JsonNode legacyManifest = objectMapper.readTree("""
+                {
+                  "manifest-version":"0.1",
+                  "plugin-id":"plugin-1",
+                  "plugin-version":"0.9.0",
+                  "backend":{"events":{"event-url":"https://example.com/events"}}
+                }
+                """);
+        PluginVersionId id = new PluginVersionId("plugin-1", "0.9.0");
+        when(versionRepository.findDetailedById(eq(id)))
+                .thenReturn(Optional.of(new PluginVersionEntity(id, plugin, legacyManifest)));
+
+        assertThat(service.getManifest("plugin-1", "0.9.0")).isEqualTo(legacyManifest);
+        verify(manifestValidator, never()).validate(any());
+    }
+
+    @Test
+    void returnsNullSdkMetadataWhenGeneratedColumnsAreNull() throws Exception {
+        PluginEntity plugin = new PluginEntity("plugin-1", "Test plugin", null);
+        JsonNode manifestWithoutSdk = objectMapper.readTree("""
+                {
+                  "manifest-version":"1.1",
+                  "plugin-id":"plugin-1",
+                  "plugin-version":"1.0.0",
+                  "name":"Test plugin",
+                  "frontend":{"url-web":"https://example.com/ui"},
+                  "backend":{
+                    "health-url":"https://example.com/health",
+                    "control-url":"https://example.com/control"
+                  }
+                }
                 """);
         PluginVersionId id = new PluginVersionId("plugin-1", "1.0.0");
-        when(versionRepository.findDetailedById(eq(id)))
-                .thenReturn(Optional.of(new PluginVersionEntity(id, plugin, manifest)));
+        when(versionRepository.findDetailedById(id))
+                .thenReturn(Optional.of(new PluginVersionEntity(id, plugin, manifestWithoutSdk)));
 
-        assertThat(service.getManifest("plugin-1", "1.0.0")).isEqualTo(manifest);
+        PluginVersionResponse response = service.getVersion("plugin-1", "1.0.0");
+
+        assertThat(response.frontendSdkVersion()).isNull();
+        assertThat(response.backendSdkVersion()).isNull();
     }
 
     @Test
@@ -130,24 +249,23 @@ class PluginRegistryServiceTest {
                 .hasMessageContaining("plugin-1");
     }
 
-    private CreatePluginVersionRequest createVersionRequest() {
-        return new CreatePluginVersionRequest(
-                "0.1",
-                "1.0.0",
-                new CreatePluginVersionRequest.Frontend("1.1.0", "https://example.com/ui"),
-                new CreatePluginVersionRequest.Backend(
-                        "2.1.0",
-                        "https://example.com/health",
-                        new CreatePluginVersionRequest.Events(
-                                "https://example.com/events",
-                                List.of(),
-                                List.of("participant")
-                        ),
-                        new CreatePluginVersionRequest.Media(
-                                List.of(CreatePluginVersionRequest.MediaType.AUDIO),
-                                List.of()
-                        )
-                )
-        );
+    private CreatePluginVersionRequest createVersionRequest() throws Exception {
+        return request(objectMapper.readTree("""
+                {
+                  "manifest-version":"1.1",
+                  "plugin-id":"plugin-1",
+                  "plugin-version":"1.0.0",
+                  "name":"Test plugin",
+                  "frontend":{"url-web":"https://example.com/ui"},
+                  "backend":{
+                    "health-url":"https://example.com/health",
+                    "control-url":"https://example.com/control"
+                  }
+                }
+                """));
+    }
+
+    private CreatePluginVersionRequest request(JsonNode manifest) {
+        return new CreatePluginVersionRequest(manifest);
     }
 }

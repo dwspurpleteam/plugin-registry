@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { createPluginVersion } from "../api/pluginRegistry";
 import type {
   CreatePluginVersionRequest,
-  MediaType,
   PluginManifest,
 } from "../api/types";
 import { PageHeader } from "../components/PageHeader";
@@ -11,25 +10,31 @@ import { PageHeader } from "../components/PageHeader";
 function defaultManifest(pluginId: string) {
   return JSON.stringify(
     {
-      "manifest-version": "0.1",
+      "manifest-version": "1.1",
       "plugin-id": pluginId,
       "plugin-version": "1.0.0",
-      name: "new-plugin-version",
-      description: "",
+      name: pluginId || "new-plugin-version",
       frontend: {
-        "sdk-version": "1.0.0",
         "url-web": "https://example.com/plugin-ui/web",
       },
       backend: {
-        "sdk-version": "1.0.0",
-        "health-url": "https://example.com/api/healthzz",
+        "health-url": "https://example.com/api/health",
+        "control-url": "https://example.com/api/control",
+        "initial-state": ["participants"],
         events: {
-          "event-url": "https://example.com/api/events",
-          "available-event-groups": ["participant", "media", "interaction"],
+          "available-event-types": [
+            "participant.joined",
+            "participant.left",
+            "call.ended",
+          ],
         },
         media: {
-          input: ["AUDIO"],
+          input: [],
           output: [],
+        },
+        results: {
+          keys: ["attendance.summary"],
+          "delivery-report-url": "https://example.com/api/deliveries",
         },
       },
     },
@@ -55,7 +60,7 @@ export function NewVersionPage() {
   const jsonStatus = useMemo(() => {
     try {
       JSON.parse(manifestText);
-      return { valid: true, label: "JSON корректен" };
+      return { valid: true, label: "JSON синтаксически корректен" };
     } catch {
       return { valid: false, label: "JSON содержит ошибку" };
     }
@@ -150,7 +155,8 @@ export function NewVersionPage() {
             <strong>Перед публикацией</strong>
             <p>
               Проверьте SDK-версии, URL сервисов и соответствие полей <code>plugin-id</code> и{" "}
-              <code>plugin-version</code>.
+              <code>plugin-version</code>. SDK-версии необязательны; название и описание при
+              публикации берутся из записи плагина в реестре.
             </p>
           </div>
 
@@ -195,69 +201,7 @@ export function NewVersionPage() {
 }
 
 function toCreateVersionRequest(manifest: PluginManifest): CreatePluginVersionRequest {
-  const frontend = asObject(manifest.frontend, "frontend");
-  const backend = asObject(manifest.backend, "backend");
-  const events = asObject(backend.events, "backend.events");
-  const media = asObject(backend.media, "backend.media");
-
-  return {
-    manifestVersion: asString(manifest["manifest-version"], "manifest-version"),
-    pluginVersion: asString(manifest["plugin-version"], "plugin-version"),
-    frontend: {
-      sdkVersion: asString(frontend["sdk-version"], "frontend.sdk-version"),
-      urlWeb: asString(frontend["url-web"], "frontend.url-web"),
-    },
-    backend: {
-      sdkVersion: asString(backend["sdk-version"], "backend.sdk-version"),
-      healthUrl: asString(backend["health-url"], "backend.health-url"),
-      events: {
-        eventUrl: asString(events["event-url"], "backend.events.event-url"),
-        availableEventTypes: asStringArray(
-          events["available-event-types"],
-          "backend.events.available-event-types",
-        ),
-        availableEventGroups: asStringArray(
-          events["available-event-groups"],
-          "backend.events.available-event-groups",
-        ),
-      },
-      media: {
-        input: asMediaTypes(media.input, "backend.media.input"),
-        output: asMediaTypes(media.output, "backend.media.output"),
-      },
-    },
-  };
-}
-
-function asObject(value: unknown, field: string): PluginManifest {
-  if (!value || Array.isArray(value) || typeof value !== "object") {
-    throw new Error(`Поле ${field} должно быть JSON-объектом.`);
-  }
-  return value as PluginManifest;
-}
-
-function asString(value: unknown, field: string): string {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`Поле ${field} должно быть непустой строкой.`);
-  }
-  return value;
-}
-
-function asStringArray(value: unknown, field: string): string[] {
-  if (value === undefined) {
-    return [];
-  }
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !item.trim())) {
-    throw new Error(`Поле ${field} должно быть массивом непустых строк.`);
-  }
-  return value;
-}
-
-function asMediaTypes(value: unknown, field: string): MediaType[] {
-  const values = asStringArray(value, field);
-  const supported = new Set<MediaType>(["AUDIO", "VIDEO", "SCREEN_SHARE", "SCREEN_SHARE_AUDIO"]);
-  if (values.some((item) => !supported.has(item as MediaType))) {
-    throw new Error(`Поле ${field} содержит неподдерживаемый тип медиа.`);
-  }
-  return values as MediaType[];
+  // Отправляем разобранный документ без изменений. Сервер проверяет именно этот JSON
+  // по канонической схеме 1.1, поэтому неизвестные поля здесь не потеряются.
+  return manifest as unknown as CreatePluginVersionRequest;
 }

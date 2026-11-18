@@ -37,8 +37,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       problem = undefined;
     }
 
+    const validationMessage = problem?.errors?.length
+      ? problem.errors.join("; ")
+      : undefined;
     throw new ApiError(
-      problem?.detail ?? problem?.title ?? `Запрос завершился с кодом ${response.status}`,
+      validationMessage
+        ?? problem?.detail
+        ?? problem?.title
+        ?? `Запрос завершился с кодом ${response.status}`,
       response.status,
     );
   }
