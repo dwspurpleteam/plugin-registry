@@ -41,6 +41,7 @@ export interface CreatePluginVersionRequest {
   backend: {
     sdkVersion: string;
     healthUrl: string;
+    actions: string[];
     events: {
       eventUrl: string;
       availableEventTypes: string[];

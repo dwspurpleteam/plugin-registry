@@ -23,7 +23,8 @@ public record CreatePluginVersionRequest(
             @NotBlank @Size(max = 100) String sdkVersion,
             @NotBlank @Size(max = 2_048) String healthUrl,
             @NotNull @Valid Events events,
-            @NotNull @Valid Media media
+            @NotNull @Valid Media media,
+            @Size(max = 100) List<@NotBlank @Size(max = 255) String> actions
     ) {
     }
 
