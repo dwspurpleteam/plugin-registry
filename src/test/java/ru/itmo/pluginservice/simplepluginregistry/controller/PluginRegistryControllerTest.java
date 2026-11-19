@@ -222,6 +222,24 @@ class PluginRegistryControllerTest {
     }
 
     @Test
+    void acceptsDeclaredActions() throws Exception {
+        ObjectNode manifest = minimalManifest();
+        ((ObjectNode) manifest.get("backend")).putArray("actions").add("microphone.mute");
+
+        publish(manifest).andExpect(status().isCreated());
+    }
+
+    @Test
+    void rejectsDuplicateOrBlankActions() throws Exception {
+        ObjectNode manifest = minimalManifest();
+        ((ObjectNode) manifest.get("backend")).putArray("actions").add("microphone.mute").add(" ");
+
+        publish(manifest)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail", containsString("actions")));
+    }
+
+    @Test
     void rejectsEmptyEventsBlock() throws Exception {
         ObjectNode manifest = minimalManifest();
         ((ObjectNode) manifest.get("backend")).putObject("events");
