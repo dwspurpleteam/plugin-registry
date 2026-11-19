@@ -4,6 +4,7 @@ on:
   push:
     branches: ['**']
     paths: ['frontend/**']
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,7 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
-    environment: ${{ github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master' || '' }}
+    environment: ${{ (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master') && 'prod' || '' }}
     concurrency:
       group: frontend-${{ github.ref }}
     defaults:
@@ -43,5 +44,4 @@ jobs:
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_ENV: ${{ github.ref == 'refs/heads/dev' && 'stage' || 'prod' }}
-        run: rsync -az --delete -e 'ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' dist/ "$DEPLOY_USER@$DEPLOY_HOST:/srv/dwspurpleteam/static/$DEPLOY_ENV/"
+        run: rsync -az --delete -e 'ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' dist/ "$DEPLOY_USER@$DEPLOY_HOST:/srv/dwspurpleteam/static/prod/"
