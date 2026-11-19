@@ -26,6 +26,7 @@ class PluginManifestFactoryTest {
         assertThat(manifest.get("plugin-version").asString()).isEqualTo("1.0.0");
         assertThat(manifest.get("frontend").get("sdk-version").asString()).isEqualTo("1.1.0");
         assertThat(manifest.get("backend").get("sdk-version").asString()).isEqualTo("2.1.0");
+        assertThat(manifest.get("backend").get("actions").get(0).asString()).isEqualTo("microphone.mute");
         assertThat(manifest.get("backend").get("events").has("available-event-groups")).isTrue();
         assertThat(manifest.get("backend").get("media").get("input").get(0).asString())
                 .isEqualTo("AUDIO");
@@ -63,7 +64,8 @@ class PluginManifestFactoryTest {
                         new CreatePluginVersionRequest.Media(
                                 List.of(CreatePluginVersionRequest.MediaType.AUDIO),
                                 List.of(CreatePluginVersionRequest.MediaType.VIDEO)
-                        )
+                        ),
+                        List.of("microphone.mute")
                 )
         );
     }

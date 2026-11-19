@@ -26,7 +26,7 @@ jobs:
       - run: ./gradlew build
 
       - name: artifact
-        if: github.ref == 'refs/heads/master'
+        if: (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev')
         uses: actions/upload-artifact@v4
         with:
           name: application
@@ -34,7 +34,7 @@ jobs:
           if-no-files-found: error
 
   image:
-    if: github.ref == 'refs/heads/master'
+    if: (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev')
     needs: backend
     uses: dwspurpleteam/.github/.github/workflows/image.yml@main
     with:
