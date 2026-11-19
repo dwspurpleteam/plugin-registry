@@ -22,6 +22,7 @@ import ru.itmo.pluginservice.simplepluginregistry.repository.PluginRepository;
 import ru.itmo.pluginservice.simplepluginregistry.repository.PluginVersionRepository;
 import ru.itmo.pluginservice.simplepluginregistry.service.PluginManifestFactory;
 import ru.itmo.pluginservice.simplepluginregistry.service.PluginManifestValidator;
+import ru.itmo.pluginservice.simplepluginregistry.service.ManifestSchemaRegistry;
 import ru.itmo.pluginservice.simplepluginregistry.service.PluginRegistryService;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -58,7 +59,7 @@ class PluginRegistryControllerTest {
                 pluginRepository,
                 versionRepository,
                 new PluginManifestFactory(),
-                new PluginManifestValidator()
+                new PluginManifestValidator(new ManifestSchemaRegistry(objectMapper))
         );
         mockMvc = MockMvcBuilders
                 .standaloneSetup(new PluginRegistryController(registryService))
@@ -113,6 +114,22 @@ class PluginRegistryControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.frontendSdkVersion").doesNotExist())
                 .andExpect(jsonPath("$.backendSdkVersion").doesNotExist());
+    }
+
+    @Test
+    void preservesBothEventListsWithoutApplyingVersionSpecificPrecedence() throws Exception {
+        ObjectNode manifest = minimalManifest();
+        ObjectNode events = ((ObjectNode) manifest.get("backend")).putObject("events");
+        events.putArray("available-event-types").add("participant.joined");
+        events.putArray("available-event-groups").add("participant");
+
+        publish(manifest).andExpect(status().isCreated());
+
+        ArgumentCaptor<PluginVersionEntity> captor = ArgumentCaptor.forClass(PluginVersionEntity.class);
+        verify(versionRepository).save(captor.capture());
+        JsonNode savedEvents = captor.getValue().getManifest().at("/backend/events");
+        assertThat(savedEvents.has("available-event-types")).isTrue();
+        assertThat(savedEvents.has("available-event-groups")).isTrue();
     }
 
     @Test
@@ -344,8 +361,11 @@ class PluginRegistryControllerTest {
     }
 
     private ResultActions publish(ObjectNode manifest) throws Exception {
+        String name = manifest.path("name").asString();
+        JsonNode description = manifest.get("description");
         when(pluginRepository.findById("plugin-1"))
-                .thenReturn(Optional.of(new PluginEntity("plugin-1", "Registry plugin", null)));
+                .thenReturn(Optional.of(new PluginEntity("plugin-1", name,
+                        description != null && description.isString() ? description.asString() : null)));
         return mockMvc.perform(post("/v1/plugins/plugin-1/versions")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(manifest)));

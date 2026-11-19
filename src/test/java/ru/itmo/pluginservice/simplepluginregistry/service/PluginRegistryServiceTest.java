@@ -88,57 +88,23 @@ class PluginRegistryServiceTest {
     }
 
     @Test
-    void validatesSubmittedAndFinalManifestBeforeSaving() throws Exception {
+    void validatesSubmittedManifestAndSavesItWithoutTransformation() throws Exception {
         PluginEntity plugin = new PluginEntity("plugin-1", "Test plugin", "Description");
         CreatePluginVersionRequest request = createVersionRequest();
         JsonNode submitted = request.manifest();
-        JsonNode manifest = objectMapper.readTree("""
-                {
-                  "manifest-version":"1.1",
-                  "plugin-id":"plugin-1",
-                  "plugin-version":"1.0.0",
-                  "name":"Test plugin",
-                  "frontend":{"url-web":"https://example.com/ui","sdk-version":"1.1.0"},
-                  "backend":{
-                    "health-url":"https://example.com/health",
-                    "control-url":"https://example.com/control",
-                    "sdk-version":"2.1.0"
-                  }
-                }
-                """);
+        JsonNode manifest = submitted;
         when(pluginRepository.findById("plugin-1")).thenReturn(Optional.of(plugin));
         when(manifestFactory.create(plugin, request)).thenReturn(manifest);
 
         PluginVersionResponse response = service.createVersion("plugin-1", request);
 
         assertThat(response).isEqualTo(new PluginVersionResponse(
-                "plugin-1", "1.0.0", "Test plugin", "Description", "1.1.0", "2.1.0"
+                "plugin-1", "1.0.0", "Test plugin", "Description", null, null
         ));
         InOrder order = inOrder(manifestValidator, manifestFactory, versionRepository);
         order.verify(manifestValidator).validate(submitted);
         order.verify(manifestFactory).create(plugin, request);
-        order.verify(manifestValidator).validate(manifest);
         order.verify(versionRepository).save(any(PluginVersionEntity.class));
-    }
-
-    @Test
-    void doesNotSaveWhenGeneratedManifestFailsValidation() throws Exception {
-        PluginEntity plugin = new PluginEntity("plugin-1", "Test plugin", null);
-        CreatePluginVersionRequest request = createVersionRequest();
-        JsonNode invalidFinalManifest = objectMapper.readTree("{} ");
-        when(pluginRepository.findById("plugin-1")).thenReturn(Optional.of(plugin));
-        when(manifestFactory.create(plugin, request)).thenReturn(invalidFinalManifest);
-        org.mockito.Mockito.doAnswer(invocation -> {
-            JsonNode candidate = invocation.getArgument(0);
-            if (candidate.equals(invalidFinalManifest)) {
-                throw new ManifestValidationException(List.of("backend.control-url: missing"));
-            }
-            return null;
-        }).when(manifestValidator).validate(any());
-
-        assertThatThrownBy(() -> service.createVersion("plugin-1", request))
-                .isInstanceOf(ManifestValidationException.class);
-        verify(versionRepository, never()).save(any());
     }
 
     @Test
@@ -150,6 +116,7 @@ class PluginRegistryServiceTest {
                   "plugin-id":"another-plugin",
                   "plugin-version":"1.0.0",
                   "name":"Test plugin",
+                  "description":"Description",
                   "frontend":{"url-web":"https://example.com/ui"},
                   "backend":{
                     "health-url":"https://example.com/health",
@@ -222,6 +189,7 @@ class PluginRegistryServiceTest {
                   "plugin-id":"plugin-1",
                   "plugin-version":"1.0.0",
                   "name":"Test plugin",
+                  "description":"Description",
                   "frontend":{"url-web":"https://example.com/ui"},
                   "backend":{
                     "health-url":"https://example.com/health",
@@ -256,6 +224,7 @@ class PluginRegistryServiceTest {
                   "plugin-id":"plugin-1",
                   "plugin-version":"1.0.0",
                   "name":"Test plugin",
+                  "description":"Description",
                   "frontend":{"url-web":"https://example.com/ui"},
                   "backend":{
                     "health-url":"https://example.com/health",

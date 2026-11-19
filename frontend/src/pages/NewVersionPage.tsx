@@ -1,6 +1,10 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { createPluginVersion, getManifestSchema11 } from "../api/pluginRegistry";
+import {
+  createPluginVersion,
+  getManifestSchema,
+  getManifestSchemaVersions,
+} from "../api/pluginRegistry";
 import type {
   CreatePluginVersionRequest,
   JsonSchema,
@@ -62,14 +66,17 @@ export function NewVersionPage() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [manifestSchema, setManifestSchema] = useState<JsonSchema | null>(null);
+  const [schemaVersions, setSchemaVersions] = useState<string[]>([]);
+  const [schemaVersion, setSchemaVersion] = useState("1.1");
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const manifestEditorRef = useRef<ManifestJsonEditorHandle>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-    getManifestSchema11(controller.signal)
-      .then((schema) => {
-        setManifestSchema(schema);
+    getManifestSchemaVersions(controller.signal)
+      .then(({ versions }) => {
+        setSchemaVersions(versions);
+        setSchemaVersion((current) => versions.includes(current) ? current : (versions[0] ?? ""));
         setSchemaError(null);
       })
       .catch((error: unknown) => {
@@ -78,11 +85,28 @@ export function NewVersionPage() {
         }
         const reason = error instanceof Error ? error.message : "неизвестная ошибка";
         setSchemaError(
-          `Не удалось загрузить схему 1.1: ${reason}. Подсказки значений временно недоступны.`,
+          `Не удалось загрузить список схем: ${reason}. Подсказки значений временно недоступны.`,
         );
       });
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (!schemaVersion) return;
+    const controller = new AbortController();
+    setManifestSchema(null);
+    getManifestSchema(schemaVersion, controller.signal)
+      .then((schema) => {
+        setManifestSchema(schema);
+        setSchemaError(null);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        const reason = error instanceof Error ? error.message : "неизвестная ошибка";
+        setSchemaError(`Не удалось загрузить схему ${schemaVersion}: ${reason}.`);
+      });
+    return () => controller.abort();
+  }, [schemaVersion]);
 
   const jsonStatus = useMemo(() => {
     try {
@@ -109,7 +133,9 @@ export function NewVersionPage() {
         nextErrors.manifest = "Манифест должен быть JSON-объектом.";
       } else {
         manifest = parsed as PluginManifest;
-        if (manifest["plugin-id"] !== pluginId) {
+        if (manifest["manifest-version"] !== schemaVersion) {
+          nextErrors.manifest = "Поле manifest-version должно совпадать с выбранным форматом.";
+        } else if (manifest["plugin-id"] !== pluginId) {
           nextErrors.manifest = `Поле plugin-id должно быть равно «${pluginId}».`;
         } else if (manifest["plugin-version"] !== version.trim()) {
           nextErrors.manifest = "Поле plugin-version должно совпадать с номером версии формы.";
@@ -161,6 +187,19 @@ export function NewVersionPage() {
       <form className="editor-layout" onSubmit={handleSubmit} noValidate>
         <aside className="form-panel">
           <div className="field-group">
+            <label htmlFor="manifest-version">Формат манифеста</label>
+            <select
+              id="manifest-version"
+              value={schemaVersion}
+              onChange={(event) => setSchemaVersion(event.target.value)}
+              disabled={schemaVersions.length === 0}
+            >
+              {schemaVersions.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+            <small>Смена формата меняет схему проверки, но не преобразует введённый JSON.</small>
+          </div>
+
+          <div className="field-group">
             <label htmlFor="plugin-id">ID плагина</label>
             <input id="plugin-id" value={pluginId} disabled />
             <small>Версия будет добавлена к этому плагину.</small>
@@ -183,7 +222,7 @@ export function NewVersionPage() {
             <p>
               Проверьте SDK-версии, URL сервисов и соответствие полей <code>plugin-id</code> и{" "}
               <code>plugin-version</code>. SDK-версии необязательны; название и описание при
-              публикации берутся из записи плагина в реестре.
+              должны совпадать с записью плагина в реестре.
             </p>
           </div>
 
@@ -230,6 +269,7 @@ export function NewVersionPage() {
             ref={manifestEditorRef}
             value={manifestText}
             schema={manifestSchema}
+            schemaVersion={schemaVersion}
             onChange={setManifestText}
           />
           {errors.manifest ? <div className="editor-error">{errors.manifest}</div> : null}
@@ -240,7 +280,5 @@ export function NewVersionPage() {
 }
 
 function toCreateVersionRequest(manifest: PluginManifest): CreatePluginVersionRequest {
-  // Отправляем разобранный документ без изменений. Сервер проверяет именно этот JSON
-  // по канонической схеме 1.1, поэтому неизвестные поля здесь не потеряются.
-  return manifest as unknown as CreatePluginVersionRequest;
+  return manifest;
 }

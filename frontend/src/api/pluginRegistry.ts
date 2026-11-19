@@ -2,6 +2,7 @@ import type {
   CreatePluginRequest,
   CreatePluginVersionRequest,
   JsonSchema,
+  ManifestSchemaVersions,
   PagedResponse,
   Plugin,
   PluginManifest,
@@ -79,8 +80,12 @@ export function getPluginManifest(pluginId: string, version: string, signal?: Ab
   );
 }
 
-export function getManifestSchema11(signal?: AbortSignal) {
-  return request<JsonSchema>("/v1/manifest-schemas/1.1", {
+export function getManifestSchemaVersions(signal?: AbortSignal) {
+  return request<ManifestSchemaVersions>("/v1/manifest-schemas", { signal });
+}
+
+export function getManifestSchema(version: string, signal?: AbortSignal) {
+  return request<JsonSchema>(`/v1/manifest-schemas/${encodeURIComponent(version)}`, {
     signal,
     headers: { Accept: "application/schema+json" },
   });

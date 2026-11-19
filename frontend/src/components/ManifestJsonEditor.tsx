@@ -6,9 +6,6 @@ import { jsonDefaults } from "monaco-editor/languages/features/json/register";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import type { JsonSchema } from "../api/types";
 
-const MANIFEST_MODEL_URI = "inmemory://plugin-registry/plugin-manifest-1.1.json";
-const MANIFEST_SCHEMA_URI = "urn:plugin-registry:schema:plugin-manifest:1.1";
-
 type MonacoEnvironment = {
   getWorker: (_moduleId: string, label: string) => Worker;
 };
@@ -22,6 +19,7 @@ loader.config({ monaco });
 interface ManifestJsonEditorProps {
   value: string;
   schema: JsonSchema | null;
+  schemaVersion: string;
   onChange: (value: string) => void;
 }
 
@@ -30,7 +28,7 @@ export interface ManifestJsonEditorHandle {
 }
 
 export const ManifestJsonEditor = forwardRef<ManifestJsonEditorHandle, ManifestJsonEditorProps>(
-  function ManifestJsonEditor({ value, schema, onChange }, ref) {
+  function ManifestJsonEditor({ value, schema, schemaVersion, onChange }, ref) {
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
 
     useImperativeHandle(ref, () => ({
@@ -47,16 +45,16 @@ export const ManifestJsonEditor = forwardRef<ManifestJsonEditorHandle, ManifestJ
         enableSchemaRequest: false,
         schemaValidation: "error",
         schemas: schema
-          ? [{ uri: MANIFEST_SCHEMA_URI, fileMatch: ["*"], schema }]
+          ? [{ uri: `urn:plugin-registry:manifest-schema:${schemaVersion}`, fileMatch: ["*"], schema }]
           : [],
       });
-    }, [schema]);
+    }, [schema, schemaVersion]);
 
     return (
       <Editor
         height="610px"
         language="json"
-        path={MANIFEST_MODEL_URI}
+        path={`inmemory://plugin-registry/plugin-manifest-${encodeURIComponent(schemaVersion)}.json`}
         theme="vs-dark"
         value={value}
         onChange={(nextValue) => onChange(nextValue ?? "")}

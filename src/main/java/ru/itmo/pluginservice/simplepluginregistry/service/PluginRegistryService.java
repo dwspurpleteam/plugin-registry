@@ -67,7 +67,6 @@ public class PluginRegistryService {
                     "plugin-id: must match path parameter '" + pluginId + "'"
             ));
         }
-
         String pluginVersion = request.pluginVersion();
         PluginVersionId id = new PluginVersionId(pluginId, pluginVersion);
         if (versionRepository.existsById(id)) {
@@ -75,9 +74,9 @@ public class PluginRegistryService {
                     "Version '%s' of plugin '%s' already exists".formatted(pluginVersion, pluginId)
             );
         }
+        validateRegistryMetadata(plugin, request.manifest());
 
         JsonNode manifest = manifestFactory.create(plugin, request);
-        manifestValidator.validate(manifest);
         versionRepository.save(new PluginVersionEntity(id, plugin, manifest));
 
         return new PluginVersionResponse(
@@ -151,5 +150,23 @@ public class PluginRegistryService {
     private String optionalText(JsonNode node, String pointer) {
         JsonNode value = node.at(pointer);
         return value.isString() ? value.asString() : null;
+    }
+
+    private void validateRegistryMetadata(PluginEntity plugin, JsonNode manifest) {
+        List<String> errors = new java.util.ArrayList<>();
+        JsonNode name = manifest.get("name");
+        if (name != null && name.isString() && !plugin.getName().equals(name.asString())) {
+            errors.add("name: must match registry metadata '" + plugin.getName() + "'");
+        }
+        JsonNode description = manifest.get("description");
+        String expectedDescription = plugin.getDescription();
+        if (description != null && description.isString()
+                && !java.util.Objects.equals(expectedDescription, description.asString())) {
+            errors.add("description: must match registry metadata");
+        }
+        if (description == null && expectedDescription != null && !expectedDescription.isBlank()) {
+            errors.add("description: must match registry metadata");
+        }
+        if (!errors.isEmpty()) throw new ManifestValidationException(errors);
     }
 }

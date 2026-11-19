@@ -24,8 +24,8 @@
       "additionalProperties": false,
       "required": ["health-url", "control-url"],
       "properties": {
-        "health-url": { "$ref": "#/$defs/httpsUrl" },
-        "control-url": { "$ref": "#/$defs/httpsUrl" },
+        "health-url": { "$ref": "#/$defs/publicHttpsUrl" },
+        "control-url": { "$ref": "#/$defs/publicHttpsUrl" },
         "sdk-version": { "$ref": "#/$defs/nonBlankString" },
         "initial-state": {
           "type": "array",
@@ -48,7 +48,7 @@
           "required": ["keys"],
           "properties": {
             "keys": { "$ref": "#/$defs/nonEmptyStringList" },
-            "delivery-report-url": { "$ref": "#/$defs/httpsUrl" }
+            "delivery-report-url": { "$ref": "#/$defs/publicHttpsUrl" }
           }
         }
       }
@@ -62,8 +62,11 @@
     },
     "httpsUrl": {
       "type": "string",
-      "format": "uri",
-      "pattern": "^https://[^/?#\\s@]+(?:/[^?#\\s]*)?(?:\\?[^#\\s]*)?$"
+      "format": "https-uri"
+    },
+    "publicHttpsUrl": {
+      "type": "string",
+      "format": "public-https-uri"
     },
     "nonEmptyStringList": {
       "type": "array",

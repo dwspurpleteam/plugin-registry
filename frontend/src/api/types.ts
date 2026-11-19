@@ -29,36 +29,10 @@ export interface CreatePluginRequest {
   description: string | null;
 }
 
-export type MediaType = "AUDIO" | "VIDEO" | "SCREEN_SHARE" | "SCREEN_SHARE_AUDIO";
+export type CreatePluginVersionRequest = PluginManifest;
 
-export interface CreatePluginVersionRequest {
-  "manifest-version": "1.1";
-  "plugin-id": string;
-  "plugin-version": string;
-  name: string;
-  description?: string;
-  frontend: {
-    "url-web": string;
-    "sdk-version"?: string;
-  };
-  backend: {
-    "health-url": string;
-    "control-url": string;
-    "sdk-version"?: string;
-    "initial-state"?: string[];
-    events?: {
-      "available-event-types"?: string[];
-      "available-event-groups"?: string[];
-    };
-    media?: {
-      input?: MediaType[];
-      output?: MediaType[];
-    };
-    results?: {
-      keys: string[];
-      "delivery-report-url"?: string;
-    };
-  };
+export interface ManifestSchemaVersions {
+  versions: string[];
 }
 
 export interface ProblemDetail {
