@@ -1,6 +1,13 @@
-# Simple Plugin Registry
+# Простой реестр плагинов
 
-Небольшой read-only реестр метаданных и неизменяемых версий плагинов на Spring Boot и PostgreSQL.
+Plugin Registry хранит метаданные плагинов и неизменяемые JSON-манифесты их версий, проверяет новые публикации по зарегистрированной версии схемы и отдаёт сохранённые документы другим сервисам.
+
+Первичные источники контракта:
+
+- [спецификация манифеста 1.1](https://github.com/dwspurpleteam/specs/blob/main/specs/plugin-service-architecture/plugin-manifest-v1.1.md);
+- [JSON Schema 1.1](https://github.com/dwspurpleteam/specs/blob/main/specs/plugin-service-architecture/plugin-manifest-v1.1.schema.json).
+
+Поставляемые схемы находятся в `src/main/resources/plugin-manifest/<version>.schema.json` и используются для воспроизводимой автономной валидации. Источником согласования контракта остаётся репозиторий `specs`.
 
 ## Локальный запуск
 
@@ -10,11 +17,9 @@
 ./gradlew bootRun
 ```
 
-При старте Flyway создаёт таблицы `plugins` и `plugin_versions`. Hibernate только проверяет схему и не изменяет её.
+При старте Flyway создаёт таблицы `plugins` и `plugin_versions`. Hibernate проверяет схему и не изменяет её.
 
 ## Docker
-
-Собрать executable JAR и Docker-образ:
 
 ```shell
 ./gradlew dockerBuild
@@ -26,17 +31,16 @@
 ./gradlew dockerBuild -PdockerImageName=simple-plugin-registry:local
 ```
 
-Настройки подключения к PostgreSQL передаются контейнеру через переменные `DB_URL`, `DB_USERNAME` и `DB_PASSWORD`.
+Настройки PostgreSQL передаются через `DB_URL`, `DB_USERNAME` и `DB_PASSWORD`.
 
 ## HTTP API
 
-Интерактивная документация Swagger UI доступна по адресу
-`http://localhost:8080/swagger-ui`, а OpenAPI-спецификация — по
-`http://localhost:8080/v3/api-docs` (JSON) и
-`http://localhost:8080/v3/api-docs.yaml` (YAML).
+Swagger UI доступен по адресу `http://localhost:8080/swagger-ui`, OpenAPI — по адресам `http://localhost:8080/v3/api-docs` и `http://localhost:8080/v3/api-docs.yaml`.
 
 ```text
 GET  /health
+GET  /v1/manifest-schemas/1.1
+GET  /v1/manifest-schemas
 GET  /v1/plugins?page=1&limit=20
 GET  /v1/plugins/{pluginId}/versions?page=1&limit=20
 GET  /v1/plugins/{pluginId}/versions/{version}
@@ -45,7 +49,7 @@ POST /v1/plugins
 POST /v1/plugins/{pluginId}/versions
 ```
 
-Коллекции имеют единый формат:
+Пагинация начинается с 1, лимит по умолчанию равен 20:
 
 ```json
 {
@@ -57,58 +61,81 @@ POST /v1/plugins/{pluginId}/versions
 }
 ```
 
-Опубликованная версия идентифицируется парой `plugin_id + version`. Её изменение запрещено на уровне Hibernate и триггером PostgreSQL; новая конфигурация должна публиковаться под новым номером версии.
-
-Колонки `frontend_sdk_version` и `backend_sdk_version` автоматически вычисляются PostgreSQL из полей `frontend.sdk-version` и `backend.sdk-version` JSON-манифеста. В API они возвращаются как `frontendSdkVersion` и `backendSdkVersion`.
-
 ### Создание плагина
 
 ```json
 {
   "id": "plugin-1",
-  "name": "Test plugin",
-  "description": "Plugin description"
+  "name": "Тестовый плагин",
+  "description": "Описание плагина"
 }
 ```
 
-### Создание версии
+### Публикация версии
 
-`POST /v1/plugins/plugin-1/versions` принимает типизированную конфигурацию:
+`POST /v1/plugins/plugin-1/versions` принимает сам JSON-манифест 1.1 без промежуточного camelCase-представления. Минимальный валидный запрос:
 
 ```json
 {
-  "manifestVersion": "0.1",
-  "pluginVersion": "1.0.0",
+  "manifest-version": "1.1",
+  "plugin-id": "plugin-1",
+  "plugin-version": "1.0.0",
+  "name": "Тестовый плагин",
   "frontend": {
-    "sdkVersion": "1.0.0",
-    "urlWeb": "https://example.com/plugin-ui/web"
+    "url-web": "https://plugins.example.com/plugin-1/"
   },
   "backend": {
-    "sdkVersion": "1.0.0",
-    "healthUrl": "https://example.com/api/healthzz",
-    "events": {
-      "eventUrl": "https://example.com/api/events",
-      "availableEventTypes": [],
-      "availableEventGroups": ["participant", "media", "interaction"]
-    },
-    "media": {
-      "input": ["AUDIO", "VIDEO"],
-      "output": []
-    }
+    "health-url": "https://plugins.example.com/plugin-1/health",
+    "control-url": "https://plugins.example.com/plugin-1/control"
   }
 }
 ```
 
-Backend добавляет в итоговый JSON поля `plugin-id`, `name` и `description` из таблицы `plugins` и преобразует DTO в формат манифеста с kebab-case ключами. Если одновременно переданы `availableEventTypes` и `availableEventGroups`, сохраняются только конкретные типы событий.
+`plugin-id` обязан совпадать с `{pluginId}` в URL. `plugin-version` становится второй частью ключа опубликованной версии. Поля `name` и `description` должны совпадать с записью плагина в реестре; Registry отклоняет расхождение и не переписывает документ. Полный пример для 1.1 приведён в [plugin-manifest.md](plugin-manifest.md).
 
-## Frontend
+Перед сохранением серверная часть:
 
-React + TypeScript интерфейс находится в каталоге `frontend`. Для локального запуска сначала запустите backend, затем:
+1. проверяет исходный JSON по JSON Schema Draft 2020-12;
+2. сверяет `plugin-id` с параметром пути;
+3. формирует итоговый документ из данных реестра и запроса;
+4. повторно проверяет уже итоговый JSON той же схемой;
+5. сохраняет документ только после успешного завершения всех проверок.
+
+Неизвестные поля, `event-url`, старые `manifest-version`, неизвестные enum-значения, повторяющиеся элементы массивов и некорректные URL возвращают HTTP 400 с путём проблемного поля. Повторная публикация той же пары `plugin-id + plugin-version` возвращает HTTP 409.
+
+## Неизменяемость и старые версии
+
+Строка `plugin_versions` защищена одновременно `@Immutable` и PostgreSQL trigger `plugin_versions_are_immutable`. Изменение конфигурации требует новой `plugin-version`; `manifest-version` и `plugin-version` независимы.
+
+Новые публикации принимаются только с `manifest-version: "1.1"`. Ранее сохранённые 0.1/1.0 документы не мигрируются и не валидируются повторно при чтении: GET возвращает исходный JSON, включая старый `event-url`. Автоматической конвертации нет, потому что для 1.1 нужны новые обязательные данные, прежде всего `control-url`.
+
+Манифест по-прежнему хранится в JSONB, поэтому миграция БД для полей 1.1 не требуется. Вычисляемые колонки `frontend_sdk_version` и `backend_sdk_version` возвращают SQL `NULL`, если соответствующее необязательное поле `sdk-version` отсутствует.
+
+## URL и SSRF
+
+Все URL должны быть абсолютными HTTPS URI с корректным именем узла и портом, без данных пользователя и фрагмента. Для `backend.health-url`, `backend.control-url` и `backend.results.delivery-report-url` реестр дополнительно отклоняет явно заданные частные, локальные, зарезервированные и многоадресные IP, а также имена `localhost` и `.local`.
+
+Реестр сам не выполняет исходящие запросы и не разрешает DNS при публикации. Компонент, который позднее вызывает межсерверный URL, обязан на своей границе повторно проверить результат DNS, все полученные адреса и каждое перенаправление, запретить частные, локальные и служебные адреса, ограничить исходящий трафик, время ожидания и размер ответа. Проверка только строки URL в реестре не защищает от подмены адреса через DNS.
+
+## Пользовательский интерфейс
+
+Интерфейс на React и TypeScript находится в `frontend`. Он получает список форматов через `GET /v1/manifest-schemas`, а выбранную схему — через `GET /v1/manifest-schemas/{version}`. Monaco Editor показывает ошибки структуры и предлагает допустимые значения из `enum`. Смена формата не преобразует введённый JSON.
+
+Редактор отправляет разобранный документ без выборочного преобразования полей, поэтому новые или неизвестные свойства не теряются: серверная часть либо принимает весь поддержанный документ, либо возвращает ошибку схемы. Проверка в редакторе помогает пользователю, но не заменяет обязательную серверную валидацию перед сохранением.
 
 ```shell
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-Vite откроет frontend на `http://localhost:5173` и проксирует запросы `/v1` в Spring-приложение. Для нестандартного локального порта задайте `VITE_API_PROXY_TARGET`, а для отдельного размещения API — `VITE_API_BASE_URL`, используя `.env.example` как шаблон.
+Vite открывает пользовательский интерфейс по адресу `http://localhost:5173` и перенаправляет запросы `/v1` в Spring-приложение. `VITE_API_PROXY_TARGET` меняет локальный адрес назначения, а `VITE_API_BASE_URL` задаёт отдельный URL API на этапе сборки.
+
+Plugin Registry не активирует плагины, не проверяет права конкретной активации, не получает участников из LiveKit, не доставляет события или медиа и не отправляет результаты.
+# Версионированные схемы манифеста
+
+Plugin Registry загружает все `src/main/resources/plugin-manifest/*.schema.json` при запуске, в том числе из собранного JAR. Имя файла задаёт версию: `1.1.schema.json` обслуживает документы с `"manifest-version": "1.1"`. Чтобы добавить утверждённую версию, достаточно разместить её JSON Schema draft 2020-12 в этом каталоге и перезапустить приложение; изменения Java и frontend не требуются.
+
+`GET /v1/manifest-schemas` возвращает доступные версии, а `GET /v1/manifest-schemas/{version}` — исходную схему с типом `application/schema+json`. При публикации неизвестная версия отклоняется, но чтение уже сохранённых JSONB не зависит от наличия схемы.
+
+Схема является источником структурных правил. Реестр отдельно проверяет инварианты публикации: `plugin-id` должен совпадать с URL, `plugin-version` идентифицирует неизменяемую запись, а `name` и `description` должны совпадать с метаданными плагина. Документ сохраняется без преобразований.

@@ -1,0 +1,84 @@
+import Editor, { loader } from "@monaco-editor/react";
+import * as monaco from "monaco-editor/editor/editor.api";
+import EditorWorker from "monaco-editor/editor/editor.worker?worker";
+import JsonWorker from "monaco-editor/language/json/json.worker?worker";
+import { jsonDefaults } from "monaco-editor/languages/features/json/register";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import type { JsonSchema } from "../api/types";
+
+type MonacoEnvironment = {
+  getWorker: (_moduleId: string, label: string) => Worker;
+};
+
+(self as unknown as { MonacoEnvironment: MonacoEnvironment }).MonacoEnvironment = {
+  getWorker: (_moduleId, label) => label === "json" ? new JsonWorker() : new EditorWorker(),
+};
+
+loader.config({ monaco });
+
+interface ManifestJsonEditorProps {
+  value: string;
+  schema: JsonSchema | null;
+  schemaVersion: string;
+  onChange: (value: string) => void;
+}
+
+export interface ManifestJsonEditorHandle {
+  showSuggestions: () => void;
+}
+
+export const ManifestJsonEditor = forwardRef<ManifestJsonEditorHandle, ManifestJsonEditorProps>(
+  function ManifestJsonEditor({ value, schema, schemaVersion, onChange }, ref) {
+    const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+
+    useImperativeHandle(ref, () => ({
+      showSuggestions: () => {
+        editorRef.current?.focus();
+        editorRef.current?.trigger("manifest-editor", "editor.action.triggerSuggest", {});
+      },
+    }), []);
+
+    useEffect(() => {
+      jsonDefaults.setDiagnosticsOptions({
+        validate: true,
+        allowComments: false,
+        enableSchemaRequest: false,
+        schemaValidation: "error",
+        schemas: schema
+          ? [{ uri: `urn:plugin-registry:manifest-schema:${schemaVersion}`, fileMatch: ["*"], schema }]
+          : [],
+      });
+    }, [schema, schemaVersion]);
+
+    return (
+      <Editor
+        height="610px"
+        language="json"
+        path={`inmemory://plugin-registry/plugin-manifest-${encodeURIComponent(schemaVersion)}.json`}
+        theme="vs-dark"
+        value={value}
+        onChange={(nextValue) => onChange(nextValue ?? "")}
+        onMount={(editor) => {
+          editorRef.current = editor;
+        }}
+        loading={<div className="editor-loading">Загрузка редактора…</div>}
+        options={{
+          automaticLayout: true,
+          minimap: { enabled: false },
+          fontFamily: '"SFMono-Regular", Consolas, monospace',
+          fontSize: 12,
+          lineHeight: 20,
+          tabSize: 2,
+          insertSpaces: true,
+          formatOnPaste: true,
+          quickSuggestions: true,
+          suggestOnTriggerCharacters: true,
+          wordBasedSuggestions: "off",
+          scrollBeyondLastLine: false,
+          padding: { top: 18, bottom: 18 },
+          ariaLabel: "JSON-манифест плагина",
+        }}
+      />
+    );
+  },
+);

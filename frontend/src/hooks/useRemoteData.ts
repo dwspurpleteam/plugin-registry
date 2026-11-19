@@ -41,7 +41,7 @@ export function useRemoteData<T>(
       });
 
     return () => controller.abort();
-    // The caller controls when a request should be repeated through dependencies.
+    // Вызывающий код управляет повторным выполнением запроса через зависимости.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...dependencies, reloadToken]);
 

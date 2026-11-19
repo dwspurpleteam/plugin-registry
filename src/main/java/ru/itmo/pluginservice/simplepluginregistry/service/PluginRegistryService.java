@@ -13,6 +13,7 @@ import ru.itmo.pluginservice.simplepluginregistry.dto.PluginVersionResponse;
 import ru.itmo.pluginservice.simplepluginregistry.entity.PluginEntity;
 import ru.itmo.pluginservice.simplepluginregistry.entity.PluginVersionEntity;
 import ru.itmo.pluginservice.simplepluginregistry.entity.PluginVersionId;
+import ru.itmo.pluginservice.simplepluginregistry.exception.ManifestValidationException;
 import ru.itmo.pluginservice.simplepluginregistry.exception.ResourceConflictException;
 import ru.itmo.pluginservice.simplepluginregistry.exception.ResourceNotFoundException;
 import ru.itmo.pluginservice.simplepluginregistry.repository.PluginRepository;
@@ -28,15 +29,18 @@ public class PluginRegistryService {
     private final PluginRepository pluginRepository;
     private final PluginVersionRepository versionRepository;
     private final PluginManifestFactory manifestFactory;
+    private final PluginManifestValidator manifestValidator;
 
     public PluginRegistryService(
             PluginRepository pluginRepository,
             PluginVersionRepository versionRepository,
-            PluginManifestFactory manifestFactory
+            PluginManifestFactory manifestFactory,
+            PluginManifestValidator manifestValidator
     ) {
         this.pluginRepository = pluginRepository;
         this.versionRepository = versionRepository;
         this.manifestFactory = manifestFactory;
+        this.manifestValidator = manifestValidator;
     }
 
     @Transactional
@@ -57,23 +61,31 @@ public class PluginRegistryService {
             CreatePluginVersionRequest request
     ) {
         PluginEntity plugin = findPlugin(pluginId);
-        PluginVersionId id = new PluginVersionId(pluginId, request.pluginVersion());
+        manifestValidator.validate(request.manifest());
+        if (!pluginId.equals(request.pluginId())) {
+            throw new ManifestValidationException(List.of(
+                    "plugin-id: must match path parameter '" + pluginId + "'"
+            ));
+        }
+        String pluginVersion = request.pluginVersion();
+        PluginVersionId id = new PluginVersionId(pluginId, pluginVersion);
         if (versionRepository.existsById(id)) {
             throw new ResourceConflictException(
-                    "Version '%s' of plugin '%s' already exists".formatted(request.pluginVersion(), pluginId)
+                    "Version '%s' of plugin '%s' already exists".formatted(pluginVersion, pluginId)
             );
         }
+        validateRegistryMetadata(plugin, request.manifest());
 
         JsonNode manifest = manifestFactory.create(plugin, request);
         versionRepository.save(new PluginVersionEntity(id, plugin, manifest));
 
         return new PluginVersionResponse(
                 pluginId,
-                request.pluginVersion(),
+                pluginVersion,
                 plugin.getName(),
                 plugin.getDescription(),
-                request.frontend().sdkVersion(),
-                request.backend().sdkVersion()
+                optionalText(manifest, "/frontend/sdk-version"),
+                optionalText(manifest, "/backend/sdk-version")
         );
     }
 
@@ -133,5 +145,28 @@ public class PluginRegistryService {
                 version.getFrontendSdkVersion(),
                 version.getBackendSdkVersion()
         );
+    }
+
+    private String optionalText(JsonNode node, String pointer) {
+        JsonNode value = node.at(pointer);
+        return value.isString() ? value.asString() : null;
+    }
+
+    private void validateRegistryMetadata(PluginEntity plugin, JsonNode manifest) {
+        List<String> errors = new java.util.ArrayList<>();
+        JsonNode name = manifest.get("name");
+        if (name != null && name.isString() && !plugin.getName().equals(name.asString())) {
+            errors.add("name: must match registry metadata '" + plugin.getName() + "'");
+        }
+        JsonNode description = manifest.get("description");
+        String expectedDescription = plugin.getDescription();
+        if (description != null && description.isString()
+                && !java.util.Objects.equals(expectedDescription, description.asString())) {
+            errors.add("description: must match registry metadata");
+        }
+        if (description == null && expectedDescription != null && !expectedDescription.isBlank()) {
+            errors.add("description: must match registry metadata");
+        }
+        if (!errors.isEmpty()) throw new ManifestValidationException(errors);
     }
 }

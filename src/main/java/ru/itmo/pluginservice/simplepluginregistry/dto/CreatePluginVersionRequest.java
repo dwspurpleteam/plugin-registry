@@ -1,50 +1,42 @@
 package ru.itmo.pluginservice.simplepluginregistry.dto;
 
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+import tools.jackson.databind.JsonNode;
 
-import java.util.List;
+import java.util.Objects;
 
-public record CreatePluginVersionRequest(
-        @NotBlank @Size(max = 50) String manifestVersion,
-        @NotBlank @Size(max = 100) String pluginVersion,
-        @NotNull @Valid Frontend frontend,
-        @NotNull @Valid Backend backend
-) {
-    public record Frontend(
-            @NotBlank @Size(max = 100) String sdkVersion,
-            @NotBlank @Size(max = 2_048) String urlWeb
-    ) {
+/**
+ * Запрос на публикацию, содержащий манифест в исходном виде.
+ *
+ * <p>JSON Schema является источником истины для структуры документа. Сохранение
+ * исходного дерева JSON не позволяет промежуточному преобразованию DTO незаметно
+ * отбросить необязательные или недавно добавленные поля.</p>
+ */
+public final class CreatePluginVersionRequest {
+
+    private final JsonNode manifest;
+
+    @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+    public CreatePluginVersionRequest(JsonNode manifest) {
+        this.manifest = Objects.requireNonNull(manifest, "manifest").deepCopy();
     }
 
-    public record Backend(
-            @NotBlank @Size(max = 100) String sdkVersion,
-            @NotBlank @Size(max = 2_048) String healthUrl,
-            @NotNull @Valid Events events,
-            @NotNull @Valid Media media,
-            @Size(max = 100) List<@NotBlank @Size(max = 255) String> actions
-    ) {
+    @JsonValue
+    public JsonNode manifest() {
+        return manifest.deepCopy();
     }
 
-    public record Events(
-            @NotBlank @Size(max = 2_048) String eventUrl,
-            @NotNull List<@NotBlank String> availableEventTypes,
-            @NotNull List<@NotBlank String> availableEventGroups
-    ) {
+    public String pluginId() {
+        return textValue("plugin-id");
     }
 
-    public record Media(
-            @NotNull List<@NotNull MediaType> input,
-            @NotNull List<@NotNull MediaType> output
-    ) {
+    public String pluginVersion() {
+        return textValue("plugin-version");
     }
 
-    public enum MediaType {
-        AUDIO,
-        VIDEO,
-        SCREEN_SHARE,
-        SCREEN_SHARE_AUDIO
+    private String textValue(String fieldName) {
+        JsonNode value = manifest.get(fieldName);
+        return value != null && value.isString() ? value.asString() : null;
     }
 }
