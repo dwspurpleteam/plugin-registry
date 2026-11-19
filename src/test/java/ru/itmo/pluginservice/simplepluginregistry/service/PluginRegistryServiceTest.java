@@ -146,7 +146,8 @@ class PluginRegistryServiceTest {
                         new CreatePluginVersionRequest.Media(
                                 List.of(CreatePluginVersionRequest.MediaType.AUDIO),
                                 List.of()
-                        )
+                        ),
+                        List.of()
                 )
         );
     }
