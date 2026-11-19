@@ -34,6 +34,12 @@
           "items": { "enum": ["participants"] }
         },
         "events": { "$ref": "#/$defs/events" },
+        "actions": {
+          "type": "array",
+          "uniqueItems": true,
+          "default": [],
+          "items": { "$ref": "#/$defs/nonBlankString" }
+        },
         "media": {
           "type": "object",
           "additionalProperties": false,
