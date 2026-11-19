@@ -1,6 +1,8 @@
 import type {
   CreatePluginRequest,
   CreatePluginVersionRequest,
+  JsonSchema,
+  ManifestSchemaVersions,
   PagedResponse,
   Plugin,
   PluginManifest,
@@ -37,8 +39,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       problem = undefined;
     }
 
+    const validationMessage = problem?.errors?.length
+      ? problem.errors.join("; ")
+      : undefined;
     throw new ApiError(
-      problem?.detail ?? problem?.title ?? `Запрос завершился с кодом ${response.status}`,
+      validationMessage
+        ?? problem?.detail
+        ?? problem?.title
+        ?? `Запрос завершился с кодом ${response.status}`,
       response.status,
     );
   }
@@ -70,6 +78,17 @@ export function getPluginManifest(pluginId: string, version: string, signal?: Ab
     `/v1/plugins/${encodeURIComponent(pluginId)}/versions/${encodeURIComponent(version)}/manifest`,
     { signal },
   );
+}
+
+export function getManifestSchemaVersions(signal?: AbortSignal) {
+  return request<ManifestSchemaVersions>("/v1/manifest-schemas", { signal });
+}
+
+export function getManifestSchema(version: string, signal?: AbortSignal) {
+  return request<JsonSchema>(`/v1/manifest-schemas/${encodeURIComponent(version)}`, {
+    signal,
+    headers: { Accept: "application/schema+json" },
+  });
 }
 
 export function createPlugin(payload: CreatePluginRequest) {
